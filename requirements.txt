@@ -1,0 +1,11 @@
+h2o==3.46.0.12
+mlflow==3.16.0
+fastapi==0.141.1
+uvicorn==0.52.4
+pandas==3.0.5
+numpy==1.26.4
+
+# - H2O: trains models and makes predictions.
+# - MLflow: lets our Python code record results and save/load models through your MLflow server.
+# - FastAPI + Uvicorn: define the prediction API and run its web server.
+# - pandas + NumPy: handle tables and numerical calculations.

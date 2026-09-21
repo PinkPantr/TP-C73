@@ -1,0 +1,179 @@
+# C73 - Canadian vehicles
+# Start: docker compose up -d --build
+# Streamlit: 8501 | FastAPI: 8000 | MLflow: 5000 | MinIo: 9000 | MinIo Console: 9001 | Postgres: 5432 | PgAdmin: 5050 | H2O: 54321
+name: c73-vehicule
+services:
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: C73-MinIO
+    environment:
+      MINIO_ROOT_USER: user
+      MINIO_ROOT_PASSWORD: password
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # MinIO API
+      - "9001:9001"  # MinIO Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - project_network
+
+  postgres:
+    image: postgres:17.11
+    container_name: C73-Postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: PostgresDB
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "user", "-d", "PostgresDB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - project_network
+  
+  pgadmin:
+   image: dpage/pgadmin4:9.17
+   container_name: C73-pgAdmin
+   env_file:
+     - .env.local
+   ports:
+     - "5050:80"
+   volumes:
+     - pgadmin_data:/var/lib/pgadmin
+   networks:
+     - project_network
+   depends_on:
+    postgres:
+      condition: service_healthy
+
+  # MLflow: runs in PostgreSQL, files in MinIO
+  mlflow:
+    build: ./docker/mlflow
+    image: c73-mlflow:latest
+    container_name: C73-MLflow
+    command:
+      mlflow server
+      --backend-store-uri postgresql+psycopg://user@postgres:5432/PostgresDB
+      --artifacts-destination s3://mlflow
+      --serve-artifacts
+      --host 0.0.0.0
+      --port 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+    env_file:
+      - .env.local
+    depends_on:
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - project_network
+
+  # H2O server
+  h2o: 
+    image: c73-tp-backend:latest
+    container_name: C73-H2O
+    pull_policy: never
+    command:
+        - java
+        - -Xmx2g
+        - -jar
+        - /usr/local/lib/python3.12/site-packages/h2o/backend/bin/h2o.jar
+        - -name
+        - tp-h2o
+        - -port
+        - "54321"
+        - -nthreads
+        - "2"
+    ports:
+      - "127.0.0.1:54321:54321"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json, urllib.request; c = json.load(urllib.request.urlopen('http://localhost:54321/3/Cloud')); assert c['cloud_healthy'] and c['consensus']"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - project_network
+
+  # FastAPI backend
+  backend:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    image: c73-tp-backend:latest
+    container_name: C73-FastAPI
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      H2O_URL: http://h2o:54321
+    ports:
+      - "8000:8000"
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      h2o:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks:
+      - project_network
+
+  # Streamlit interface
+  frontend:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    image: c73-streamlit:latest
+    container_name: C73-Streamlit
+    environment:
+      BACKEND_URL: http://backend:8000/predict
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      timeout: 5s
+      retries: 5  
+      interval: 15s
+      start_period: 20s
+    networks:
+      - project_network
+
+volumes:
+  mlflow_data:
+  postgres_data:
+  minio_data:
+  pgadmin_data:
+networks:
+  project_network:
