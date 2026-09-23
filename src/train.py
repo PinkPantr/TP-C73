@@ -1,5 +1,7 @@
 import h2o
 import mlflow
+import mlflow.h2o
+
 from preprocessing import split_data, prepare_data
 from h2o.estimators import H2ORandomForestEstimator
 
@@ -59,3 +61,6 @@ with mlflow.start_run(run_name="forest_50_depth_10"):
     mlflow.log_metric("validation_mae", scores.mae())
     mlflow.log_metric("validation_rmse", scores.rmse())
     mlflow.log_metric("validation_r2", scores.r2())
+
+    mlflow.h2o.log_model(model, artifact_path="model")
+

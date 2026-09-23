@@ -1,26 +1,44 @@
-import os
-from contextlib import asynccontextmanager
-
 import h2o
+import mlflow
+import mlflow.h2o
 from fastapi import FastAPI
+from pydantic import BaseModel
+import pandas as pd
 
+class PredictionRequest(BaseModel):
+    model_year: int
+    make: str
+    vehicle_class: str
+    engine_size: float
+    cylinders: int
+    transmission: str
+    fuel_type: str
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    h2o.connect(
-        url=os.environ["H2O_URL"],
-        strict_version_check=True,
-    )
-    yield
-    h2o.connection().close()
+app = FastAPI(title="Prediction de consommation de carburant")
 
+h2o.connect(url="http://h2o:54321")
+mlflow.set_tracking_uri("http://mlflow:5000")
 
-app = FastAPI(
-    title="Consomation de carburant au Canada pour les vehicules des années 2015-2024",
-    lifespan=lifespan,
-)
+model_uri = "models:/regression@champion"
+model = mlflow.h2o.load_model(model_uri)
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.post("/predict")
+def predict(data: PredictionRequest):
+    df = pd.DataFrame([{
+        "Model year": data.model_year,
+        "Make": data.make,
+        "Vehicle class": data.vehicle_class,
+        "Engine size (L)": data.engine_size,
+        "Cylinders": data.cylinders,
+        "Transmission": data.transmission,
+        "Fuel type": data.fuel_type
+    }])
+
+    inputs = h2o.H2OFrame(df)
+    predictions = model.predict(inputs)
+    return {"prediction": float(predictions[0, 0])}
