@@ -32,7 +32,6 @@ features = [
     "Fuel type"
 ]
 target_regression = "Combined (L/100 km)"
-target_classification = "Classe smog"
 
 mlflow.set_tracking_uri("http://mlflow:5000")
 mlflow.set_experiment("C73-Regression")

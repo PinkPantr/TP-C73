@@ -42,3 +42,24 @@ def predict(data: PredictionRequest):
     inputs = h2o.H2OFrame(df)
     predictions = model.predict(inputs)
     return {"prediction": float(predictions[0, 0])}
+
+@app.post("/predict_class")
+def predict_class(data: PredictionRequest):
+    model_class= mlflow.h2o.load_model(
+        "models:/classification@champion"
+        )
+
+    df = pd.DataFrame([{
+        "Model year": data.model_year,
+        "Make": data.make,
+        "Vehicle class": data.vehicle_class,
+        "Engine size (L)": data.engine_size,
+        "Cylinders": data.cylinders,
+        "Transmission": data.transmission,
+        "Fuel type": data.fuel_type
+    }])
+
+    inputs = h2o.H2OFrame(df)
+    predictions = model_class.predict(inputs)
+
+    return{"classification": str(predictions[0, 0])}

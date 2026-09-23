@@ -59,6 +59,7 @@ if st.button("Prédire"):
               json=data,
               timeout=30
           )
+
           response.raise_for_status()
           result = response.json()
 
@@ -67,5 +68,22 @@ if st.button("Prédire"):
               round(result["prediction"], 2)
           )
 
+
+
+          response_class = requests.post(
+              "http://backend:8000/predict_class",
+              json=data,
+              timeout=30
+          )
+
+          response_class.raise_for_status()
+          result_class = response_class.json()
+
+          st.metric(
+               "Classe smog predite",
+               result_class["classification"]
+          )         
+
+                    
       except requests.exceptions.RequestException as e:
           st.error(f"La requête a échoué : {e}")
