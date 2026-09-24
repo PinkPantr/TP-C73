@@ -36,30 +36,34 @@ target_regression = "Combined (L/100 km)"
 mlflow.set_tracking_uri("http://mlflow:5000")
 mlflow.set_experiment("C73-Regression")
 
-with mlflow.start_run(run_name="forest_50_depth_10"):
-    model = H2ORandomForestEstimator(
-        ntrees=50,
-        max_depth=10,
-        seed=42
-    )
-    
-    model.train(
-        x=features,
-        y=target_regression,
-        training_frame=train_h2o,
-        validation_frame=validation_h2o
-        )
+for ntrees in [50, 100, 200, 300, 400, 500]:
+    for max_depth in [5, 10, 20, 30, 40, 50]:
 
-    mlflow.log_param("model", "Random Forest")
-    mlflow.log_param("ntrees", 50)
-    mlflow.log_param("max_depth", 10)
-    mlflow.log_param("seed", 42)
+        with mlflow.start_run(
+            run_name=f"forest_{ntrees}_depth_{max_depth}"
+        ):
+            model = H2ORandomForestEstimator(
+                ntrees=ntrees,
+                max_depth=max_depth,
+                seed=42
+            )
 
-    scores = model.model_performance(valid=True)
+            model.train(
+                x=features,
+                y=target_regression,
+                training_frame=train_h2o,
+                validation_frame=validation_h2o
+            )
 
-    mlflow.log_metric("validation_mae", scores.mae())
-    mlflow.log_metric("validation_rmse", scores.rmse())
-    mlflow.log_metric("validation_r2", scores.r2())
+            mlflow.log_param("model", "Random Forest")
+            mlflow.log_param("ntrees", ntrees)
+            mlflow.log_param("max_depth", max_depth)
+            mlflow.log_param("seed", 42)
 
-    mlflow.h2o.log_model(model, artifact_path="model")
+            scores = model.model_performance(valid=True)
 
+            mlflow.log_metric("validation_mae", scores.mae())
+            mlflow.log_metric("validation_rmse", scores.rmse())
+            mlflow.log_metric("validation_r2", scores.r2())
+
+            mlflow.h2o.log_model(model, artifact_path="model")

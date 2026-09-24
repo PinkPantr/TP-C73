@@ -40,31 +40,35 @@ validation_h2o[target_classification] = validation_h2o[target_classification].as
 mlflow.set_tracking_uri("http://mlflow:5000")
 mlflow.set_experiment("C73-Classification")
 
-with mlflow.start_run(run_name="automl+classification"):
-    automl = H2OAutoML(
-        max_models=5,
-        seed=42,
-        sort_metric="logloss",
-        balance_classes=True
-    )
-    
-    automl.train(
-        x=features,
-        y=target_classification,
-        training_frame=train_h2o,
-        leaderboard_frame=validation_h2o
-    )
+for max_models in [5, 10, 20]:
+    for balance_classes in [True, False]:
 
-    mlflow.log_param("model", "H2O AutoML")
-    mlflow.log_param("max_models", 5)
-    mlflow.log_param("seed", 42)
-    mlflow.log_param("balance_classes", True)
-    mlflow.log_param("sort_metric", "logloss")
+        with mlflow.start_run(
+            run_name=f"automl_{max_models}_balance_{balance_classes}"
+        ) as run:
+            automl = H2OAutoML(
+                max_models=max_models,
+                seed=42,
+                sort_metric="logloss",
+                balance_classes=balance_classes,
+                project_name="automl_" + run.info.run_id
+            )
 
-    scores = automl.leader.model_performance(validation_h2o)
-    mlflow.log_metric("validation_logloss", scores.logloss())
-    mlflow.h2o.log_model(automl.leader, artifact_path="model")
+            automl.train(
+                x=features,
+                y=target_classification,
+                training_frame=train_h2o,
+                leaderboard_frame=validation_h2o
+            )
 
-    print(automl.leaderboard)
+            mlflow.log_param("model", "H2O AutoML")
+            mlflow.log_param("max_models", max_models)
+            mlflow.log_param("seed", 42)
+            mlflow.log_param("balance_classes", balance_classes)
+            mlflow.log_param("sort_metric", "logloss")
 
-    
+            scores = automl.leader.model_performance(validation_h2o)
+            mlflow.log_metric("validation_logloss", scores.logloss())
+            mlflow.h2o.log_model(automl.leader, artifact_path="model")
+
+            print(automl.leaderboard)
