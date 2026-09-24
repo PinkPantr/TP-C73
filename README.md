@@ -35,58 +35,9 @@ Une note élevée correspond à moins de polluants responsables du smog. Ces gro
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    USER["Utilisateur"]
+![Architecture du projet C73](assets/architecture.png)
 
-    subgraph LOCAL["Exploration sur le PC"]
-        CSV[("CSV RNCan<br/>2015–2024")]
-        NB["Jupyter / VS Code<br/>exploration.ipynb"]
-        CSV -->|Exploration| NB
-    end
-
-    subgraph STACK["Docker Compose — réseau project_network"]
-        UI["Streamlit<br/>Interface · 8501"]
-
-        subgraph BACK["Conteneur backend — Python"]
-            API["FastAPI<br/>Prédictions · 8000"]
-            SCRIPTS["Scripts Python<br/>preprocessing.py<br/>train.py / train_class.py<br/>evaluate.py"]
-        end
-
-        H2O["H2O<br/>Apprentissage et prédictions<br/>54321"]
-        MLF["MLflow<br/>Expériences et registre des modèles<br/>5000"]
-        PG[("PostgreSQL<br/>Paramètres, métriques, registre<br/>5432")]
-        MINIO[("MinIO<br/>Modèles et autres fichiers<br/>API 9000 · Console 9001")]
-        ADMIN["pgAdmin<br/>Consultation de PostgreSQL<br/>5050"]
-
-        UI -->|Entrées JSON| API
-        API -->|Demande de prédiction| H2O
-        SCRIPTS -->|Entraînement et évaluation| H2O
-        SCRIPTS -->|Enregistrement des runs et fichiers| MLF
-        API -->|Charge les champions| MLF
-        MLF -->|Métadonnées| PG
-        MLF -->|Artifacts| MINIO
-        ADMIN -->|Consultation SQL| PG
-    end
-
-    USER -->|Saisie| UI
-    CSV -->|Copié dans les images| SCRIPTS
-    CSV -->|Aperçu et choix du formulaire| UI
-
-    classDef interface fill:#eaf2ff,stroke:#165ec6,color:#183040,stroke-width:2px;
-    classDef compute fill:#eaf7ee,stroke:#16724f,color:#183040,stroke-width:2px;
-    classDef tracking fill:#f3ecfc,stroke:#7042a1,color:#183040,stroke-width:2px;
-    classDef storage fill:#fff3e5,stroke:#a84d10,color:#183040,stroke-width:2px;
-    classDef external fill:#f0f4f8,stroke:#516575,color:#183040,stroke-width:2px;
-    class USER,UI,API,ADMIN interface;
-    class SCRIPTS,H2O compute;
-    class MLF tracking;
-    class PG,MINIO,CSV storage;
-    class NB external;
-    style LOCAL fill:#f0f4f8,stroke:#ccd9e4,color:#183040;
-    style STACK fill:#f5f8fc,stroke:#ccd9e4,color:#183040;
-    style BACK fill:#f0f8f2,stroke:#a8cbb4,color:#183040;
-```
+[Voir le diagramme en grand](assets/architecture.png) · [Source du diagramme](assets/architecture.mmd)
 
 - **Jupyter** : explorer les données avant l'entraînement.
 - **H2O** : entraîner les modèles et faire les prédictions.
