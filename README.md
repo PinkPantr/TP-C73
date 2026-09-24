@@ -1,66 +1,39 @@
 # TP C73 — Véhicules du Canada
 
-Prédiction de la consommation de carburant et classification de la note de smog avec H2O, MLflow, FastAPI et Streamlit.
+## Présentation
 
-## 1. Présentation
+Ce projet utilise les caractéristiques d'un véhicule pour faire deux prédictions :
 
-Ce projet réalise deux tâches à partir des caractéristiques d'un véhicule :
+- **Régression** : la consommation combinée de carburant, en L/100 km.
+- **Classification multiclasse** : la catégorie de note de smog.
 
-- **Régression** : prédire sa consommation combinée de carburant, en litres aux 100 kilomètres.
-- **Classification multiclasse** : prédire sa catégorie de note de smog : `Note faible`, `Note moyenne` ou `Note elevee`.
+H2O entraîne les modèles. MLflow enregistre les expériences. Streamlit permet de saisir les données et d'afficher les prédictions reçues de FastAPI.
 
-Le modèle de régression est un Random Forest entraîné avec H2O. Pour la classification, H2O AutoML compare plusieurs algorithmes. MLflow conserve les expérimentations et les modèles retenus. L'utilisateur entre les caractéristiques dans Streamlit, qui interroge l'API FastAPI pour obtenir les deux prédictions.
+## Données
 
-## 2. Données et préparation
+Le [fichier CSV](data/my2015-2024-fuel-consumption-ratings.csv) vient de [Ressources naturelles Canada](https://open.canada.ca/data/en/dataset/98f1a129-f628-4ce4-b24d-6f16bf24dd64). Il contient **10 060 lignes et 15 colonnes**, de 2015 à 2024.
 
-Le fichier provient de **Ressources naturelles Canada** : [cotes de consommation de carburant](https://open.canada.ca/data/en/dataset/98f1a129-f628-4ce4-b24d-6f16bf24dd64).
+On garde les années **2017 à 2024**, car la note de smog manque avant 2017. Il reste **7 826 lignes**.
 
-Le [CSV utilisé](data/my2015-2024-fuel-consumption-ratings.csv) est inclus dans le dépôt. Il contient **10 060 lignes et 15 colonnes**, pour les années modèles 2015 à 2024.
-
-Le notebook [exploration.ipynb](notebooks/exploration.ipynb) sert à examiner les données, leurs distributions et les valeurs manquantes. Le script [preprocessing.py](src/preprocessing.py) applique la préparation utilisée par l'entraînement et l'évaluation :
-
-1. Lire le CSV avec pandas.
-2. Garder les années modèles **2017 à 2024**, car la note de smog manque pour 2015 et 2016.
-3. Créer la colonne `Classe smog` à partir de `Smog rating`.
-4. Séparer les données selon l'année modèle.
-
-### Catégories de smog
-
-| Note d'origine | Catégorie du projet | Nombre de lignes |
-|---|---|---:|
-| 1 à 3 | Note faible | 2 485 |
-| 4 à 6 | Note moyenne | 3 709 |
-| 7 à 10 | Note elevee | 1 632 |
-
-Une **note élevée est meilleure** : elle correspond à moins d'émissions de polluants responsables du smog. Ces trois regroupements sont définis pour ce projet ; ils ne sont pas des catégories officielles. La note de smog ne mesure pas directement la consommation ni les émissions de CO₂.
-
-### Séparation des données
-
-| Ensemble | Années modèles | Lignes | Utilisation |
+| Ensemble | Années | Lignes | Rôle |
 |---|---|---:|---|
-| Entraînement | 2017–2022 | 6 118 | Apprendre les relations entre les caractéristiques et la cible |
-| Validation | 2023 | 919 | Comparer les configurations et choisir les champions |
-| Test final | 2024 | 789 | Évaluer les champions après leur sélection |
+| Entraînement | 2017–2022 | 6 118 | Entraîner les modèles |
+| Validation | 2023 | 919 | Comparer les modèles et choisir les champions |
+| Test final | 2024 | 789 | Évaluer les champions |
 
-Il reste **7 826 lignes** après le filtre sur les années. Le partage est chronologique, selon l'année modèle, et non un partage aléatoire 80/20.
+Les sept variables explicatives sont : **année modèle, marque, catégorie du véhicule, cylindrée, cylindres, transmission et carburant**. Les réponses à prédire ne sont pas utilisées comme entrées.
 
-Les deux modèles utilisent les mêmes sept variables explicatives :
+Pour la classification, on regroupe la note de smog :
 
-| Colonne du CSV | Signification |
+| Note | Classe |
 |---|---|
-| `Model year` | Année modèle |
-| `Make` | Marque |
-| `Vehicle class` | Catégorie de véhicule |
-| `Engine size (L)` | Cylindrée |
-| `Cylinders` | Nombre de cylindres |
-| `Transmission` | Type de transmission |
-| `Fuel type` | Type de carburant |
+| 1 à 3 | Note faible |
+| 4 à 6 | Note moyenne |
+| 7 à 10 | Note elevee |
 
-Les mesures de consommation, de CO₂ et la note de smog ne font pas partie des entrées. Cela évite de fournir directement la réponse, ou une mesure très proche de la réponse, au modèle.
+Une note élevée correspond à moins de polluants responsables du smog. Ces groupes sont définis pour le TP, pas par le gouvernement.
 
-## 3. Architecture
-
-Le diagramme Mermaid ci-dessous s'affiche directement sur GitHub. Les couleurs regroupent les rôles : **bleu** pour l'interface, **vert** pour le traitement, **violet** pour MLflow et **orange** pour le stockage.
+## Architecture
 
 ```mermaid
 flowchart TB
@@ -115,71 +88,46 @@ flowchart TB
     style BACK fill:#f0f8f2,stroke:#a8cbb4,color:#183040;
 ```
 
-Les flèches montrent les principaux appels et enregistrements. Les réponses reviennent au demandeur : H2O renvoie ses prédictions à FastAPI, puis FastAPI les renvoie à Streamlit. Pour le test final, `evaluate.py` charge aussi les champions depuis MLflow. Les scripts utilisent les bibliothèques Python H2O et MLflow pour communiquer avec les serveurs.
+- **Jupyter** : explorer les données avant l'entraînement.
+- **H2O** : entraîner les modèles et faire les prédictions.
+- **MLflow** : suivre les runs et conserver les modèles champions.
+- **PostgreSQL** : stocker les paramètres, les métriques et les informations des runs.
+- **MinIO** : stocker les fichiers (*artifacts*), dont les modèles.
+- **FastAPI** : recevoir les données et retourner les prédictions.
+- **Streamlit** : fournir l'interface utilisateur.
+- **pgAdmin** : consulter les tables de PostgreSQL.
 
-- **Jupyter** sert à l'exploration. Le notebook n'est pas envoyé à H2O : ce sont les scripts Python qui lui transmettent les données et les instructions.
-- **H2O** fonctionne dans son propre conteneur Java. Il entraîne les modèles et calcule les prédictions.
-- **Le conteneur backend** contient Python, FastAPI et les scripts. Lancer `src/train.py` dans ce conteneur exécute un script ; cela n'appelle pas une route FastAPI.
-- **MLflow** organise les runs et le registre. PostgreSQL conserve les métadonnées ; MinIO conserve les fichiers, appelés *artifacts*.
-- **Streamlit** appelle deux routes FastAPI. Les prédictions utilisent les champions déjà entraînés. Cliquer sur « Prédire » ne relance pas l'entraînement.
+Les scripts d'entraînement et FastAPI utilisent le même conteneur `backend`. H2O fonctionne dans un autre conteneur. Une demande de prédiction utilise les modèles enregistrés, sans les entraîner à nouveau.
 
-## 4. Structure du dépôt
+## Fichiers principaux
 
-```text
-TP-C73/
-├── api/
-│   ├── Dockerfile
-│   └── main.py                  # API FastAPI
-├── app/
-│   ├── Dockerfile
-│   ├── app.py                   # Interface Streamlit
-│   └── requirements.txt
-├── data/
-│   └── my2015-2024-fuel-consumption-ratings.csv
-├── docker/
-│   └── mlflow/Dockerfile
-├── notebooks/
-│   ├── exploration.ipynb
-│   └── verification_infrastructure.ipynb
-├── src/
-│   ├── preprocessing.py         # Préparation et séparation
-│   ├── train.py                 # Expériences Random Forest
-│   ├── train_class.py           # Expériences AutoML
-│   ├── predict.py               # Essai du champion de régression
-│   ├── predict_class.py         # Essai du champion de classification
-│   └── evaluate.py              # Test final et enregistrement MLflow
-├── .dockerignore
-├── .gitignore
-├── docker-compose.yml
-├── requirements.txt
-└── README.md
-```
+| Fichier | Rôle |
+|---|---|
+| `notebooks/exploration.ipynb` | Exploration des données |
+| `src/preprocessing.py` | Préparation et séparation des données |
+| `src/train.py` | Entraînement de la régression |
+| `src/train_class.py` | Entraînement de la classification |
+| `src/evaluate.py` | Test final et enregistrement des scores |
+| `api/main.py` | API FastAPI |
+| `app/app.py` | Interface Streamlit |
+| `docker-compose.yml` | Configuration des services Docker |
 
-Le dossier `models/` est réservé aux exports éventuels. Les modèles utilisés par l'application sont chargés depuis MLflow et stockés dans MinIO. `.env.local` est créé sur chaque machine et ignoré par Git.
+## Première installation
 
-## 5. Première installation
+Il faut **Git et Docker avec Docker Compose v2**. Docker doit être démarré et les ports du projet doivent être libres. Les dépendances Python et Java sont installées dans les images.
 
-### Prérequis
-
-- Git pour cloner le dépôt, ou le téléchargement ZIP depuis GitHub.
-- Docker avec Docker Compose v2, démarré sur la machine.
-- Les ports indiqués dans la section « Applications » disponibles.
-- VS Code avec les extensions Python et Jupyter si l'on souhaite ouvrir les notebooks.
-
-Les images installent leurs dépendances. Python et Java ne sont pas nécessaires sur le PC pour exécuter les services Docker. Le backend utilise Python 3.12, Java 17, H2O 3.46.0.12 et MLflow 3.16.0. Les versions Python sont fixées dans les fichiers `requirements.txt` ; les images PostgreSQL, MinIO et pgAdmin sont fixées dans Compose. H2O dispose de deux threads et d'un maximum de 2 Go pour sa mémoire Java ; les autres services ont aussi besoin de mémoire.
-
-### 5.1. Récupérer le projet
+### 1. Cloner le dépôt
 
 ```bash
 git clone https://github.com/PinkPantr/TP-C73.git
 cd TP-C73
 ```
 
-Toutes les commandes suivantes se lancent depuis ce dossier, à côté de `docker-compose.yml`.
+Toutes les commandes suivantes se lancent dans le dossier `TP-C73`.
 
-### 5.2. Créer `.env.local`
+### 2. Créer `.env.local`
 
-Créer ce fichier à la racine avec ces valeurs de démonstration, compatibles avec le Compose du dépôt :
+Créer ce fichier à côté de `docker-compose.yml`. Il contient les identifiants de démonstration utilisés par les services :
 
 ```dotenv
 AWS_ACCESS_KEY_ID=user
@@ -189,267 +137,128 @@ PGADMIN_DEFAULT_EMAIL=admin@tp.local
 PGADMIN_DEFAULT_PASSWORD=password
 ```
 
-Les variables `AWS_...` permettent à MLflow d'accéder à MinIO avec son API compatible S3. Elles ne correspondent pas à un compte AWS. `PGPASSWORD` fournit le mot de passe PostgreSQL à MLflow. Les deux dernières variables définissent le compte de connexion à pgAdmin lors de sa première initialisation.
+Les variables `AWS_...` servent à la connexion à MinIO. `.env.local` n'est pas envoyé sur GitHub.
 
-### 5.3. Construire les images et démarrer le stockage et H2O
+### 3. Construire les images et démarrer les premiers services
 
 ```bash
 docker compose build
 docker compose up -d --wait postgres minio mlflow h2o pgadmin
 ```
 
-H2O utilise la même image que le backend : cette image doit donc être construite avant son démarrage. `--wait` attend que les services disposant d'un contrôle de santé soient prêts.
+### 4. Créer le bucket MinIO
 
-### 5.4. Créer le bucket MinIO
+Ouvrir http://localhost:9001 et se connecter avec `user` / `password`.
 
-1. Ouvrir [MinIO](http://localhost:9001).
-2. Se connecter avec `user` et `password`.
-3. Créer un bucket nommé **`mlflow`**, en minuscules.
-4. Garder les options de versioning, object locking et quota désactivées pour ce TP.
+Créer un bucket nommé **`mlflow`**. Garder versioning, object locking et quota désactivés. Cette étape se fait une seule fois.
 
-Le nom doit correspondre à `s3://mlflow` dans `docker-compose.yml`. Il suffit de créer ce bucket une fois par installation.
-
-### 5.5. Entraîner les modèles
-
-Au premier lancement, les champions n'existent pas encore. FastAPI charge le champion de régression au démarrage : on entraîne donc les modèles avec des conteneurs temporaires, avant de lancer l'API.
+### 5. Entraîner les modèles
 
 ```bash
 docker compose run --rm --no-deps backend python src/train.py
 docker compose run --rm --no-deps backend python src/train_class.py
 ```
 
-`run` crée un conteneur pour exécuter le script. `--rm` retire ce conteneur après son exécution, mais conserve les runs et les modèles enregistrés dans les volumes. `--no-deps` utilise les serveurs déjà démarrés à l'étape 5.3.
+Exécuter les commandes l'une après l'autre. Elles utilisent des conteneurs temporaires, car FastAPI a besoin d'un champion pour démarrer. Les résultats restent enregistrés dans MLflow.
 
-Ces deux commandes lancent les grilles complètes décrites dans la section « Expérimentations ». Elles doivent être exécutées l'une après l'autre.
+### 6. Choisir les champions dans MLflow
 
-### 5.6. Enregistrer les champions dans MLflow
+Ouvrir http://localhost:5000, dans la vue **Model training**.
 
-Dans [MLflow](http://localhost:5000), choisir la vue **Model training**.
+1. Dans `C73-Regression`, comparer les runs avec `validation_rmse`. Le plus petit score est préférable.
+2. Ouvrir le modèle du run retenu et utiliser **Register model**. Le nommer **`regression`**.
+3. Dans **Model registry**, ouvrir sa version et ajouter l'alias **`champion`**.
+4. Faire la même chose dans `C73-Classification`, avec `validation_logloss`. Nommer le modèle **`classification`** et lui donner l'alias **`champion`**.
 
-1. Dans `C73-Regression`, comparer les runs sur `validation_rmse` : le plus petit score est préférable. Consulter aussi MAE et R².
-2. Ouvrir le modèle enregistré dans le run retenu, puis utiliser l'action d'enregistrement au registre (*Register model*). Utiliser le nom **`regression`**.
-3. Dans **Model registry**, ouvrir `regression`, puis la version retenue. Lui attribuer l'alias **`champion`**.
-4. Répéter pour `C73-Classification`, en comparant `validation_logloss`. Enregistrer le modèle retenu sous **`classification`**, puis attribuer **`champion`** à sa version.
+Le code utilise `models:/regression@champion` et `models:/classification@champion`. Il faut un **alias**, pas seulement un tag.
 
-Les deux adresses attendues par le code sont :
-
-```text
-models:/regression@champion
-models:/classification@champion
-```
-
-`champion` doit être un **alias de version**, pas seulement un tag ou le nom d'un run. Les numéros de version sont propres à chaque installation : il faut choisir les versions créées sur sa machine.
-
-### 5.7. Démarrer l'API et l'interface
+### 7. Démarrer FastAPI et Streamlit
 
 ```bash
 docker compose up -d --wait backend frontend
 docker compose ps
 ```
 
-Ouvrir [Streamlit](http://localhost:8501), remplir le formulaire et cliquer sur **Prédire**. La consommation prédite et la classe de smog s'affichent sous le bouton.
+Ouvrir Streamlit, remplir les sept champs et cliquer sur **Prédire**. La consommation et la classe de smog s'affichent.
 
-## 6. Applications et utilisation
+## Applications
 
-| Application | Adresse sur le PC | Rôle |
-|---|---|---|
-| Streamlit | http://localhost:8501 | Entrer les caractéristiques et afficher les résultats |
-| FastAPI | http://localhost:8000/docs | Documentation interactive et essais des routes |
-| MLflow | http://localhost:5000 | Comparer les runs, consulter les modèles et artifacts |
-| MinIO | http://localhost:9001 | Consulter les fichiers du bucket `mlflow` |
-| H2O Flow | http://localhost:54321 | Consulter le serveur H2O |
-| pgAdmin | http://localhost:5050 | Explorer les tables PostgreSQL |
-| PostgreSQL | `localhost:5432` | Connexion avec un client SQL ; ce n'est pas une page Web |
-| MinIO API | `localhost:9000` | Accès compatible S3 ; la console est sur 9001 |
-
-### Routes FastAPI
-
-| Méthode | Route | Résultat |
-|---|---|---|
-| GET | `/health` | `{"status": "ok"}` si l'API répond |
-| POST | `/predict` | `{"prediction": ...}` : consommation en L/100 km |
-| POST | `/predict_class` | `{"classification": ...}` : catégorie de smog |
-
-Exemple de corps JSON à saisir dans `/docs` avec **Try it out** :
-
-```json
-{
-  "model_year": 2024,
-  "make": "Acura",
-  "vehicle_class": "Full-size",
-  "engine_size": 1.5,
-  "cylinders": 4,
-  "transmission": "AV7",
-  "fuel_type": "Z"
-}
-```
-
-Les catégories doivent reprendre les valeurs du CSV. Streamlit propose les valeurs disponibles dans ses listes déroulantes. Les adresses comme `http://backend:8000` et `http://mlflow:5000` servent entre conteneurs ; dans le navigateur du PC, utiliser `localhost`.
-
-### Consulter PostgreSQL avec pgAdmin
-
-1. Se connecter à pgAdmin avec le compte choisi dans `.env.local`.
-2. Ajouter un serveur nommé, par exemple, `C73 PostgreSQL`.
-3. Dans l'onglet de connexion, saisir : hôte `postgres`, port `5432`, base de maintenance `PostgresDB`, utilisateur `user`, mot de passe `password`.
-4. Ouvrir **Databases → PostgresDB → Schemas → public → Tables**.
-5. Consulter par exemple `experiments`, `runs`, `params` ou `metrics` avec **View/Edit Data**.
-
-L'hôte est `postgres` parce que pgAdmin fonctionne dans Docker. Les fichiers des modèles se trouvent dans MinIO, pas dans ces tables.
-
-## 7. Expérimentations et champions
-
-### Régression : Random Forest
-
-[train.py](src/train.py) teste toutes les combinaisons suivantes, soit **36 runs par exécution** :
-
-| Paramètre | Valeurs |
+| Application | Adresse |
 |---|---|
-| `ntrees` | 50, 100, 200, 300, 400, 500 |
-| `max_depth` | 5, 10, 20, 30, 40, 50 |
-| `seed` | 42 |
+| Streamlit | http://localhost:8501 |
+| FastAPI — documentation et essais | http://localhost:8000/docs |
+| MLflow | http://localhost:5000 |
+| MinIO — console | http://localhost:9001 |
+| H2O Flow | http://localhost:54321 |
+| pgAdmin | http://localhost:5050 |
 
-Chaque run enregistre les paramètres, MAE, RMSE, R² de validation et le modèle. Le critère principal choisi est **RMSE**, qui donne davantage de poids aux grosses erreurs.
+FastAPI propose `GET /health`, `POST /predict` pour la régression et `POST /predict_class` pour la classification.
 
-Le champion retenu utilise **200 arbres et une profondeur maximale de 30**. Les profondeurs 40 et 50 ont donné le même RMSE avec 200 arbres ; la limite de 30 a été retenue.
+Dans pgAdmin, ajouter un serveur avec l'hôte `postgres`, le port `5432`, la base `PostgresDB`, l'utilisateur `user` et le mot de passe `password`. PostgreSQL ne s'ouvre pas comme une page Web.
 
-### Classification : H2O AutoML
+## Modèles et expérimentations
 
-[train_class.py](src/train_class.py) teste **six configurations AutoML par exécution** :
+| Tâche | Essais | Champion retenu |
+|---|---|---|
+| Régression | 36 configurations Random Forest | 200 arbres, profondeur maximale de 30 |
+| Classification | 6 configurations H2O AutoML | XGBoost |
 
-| Paramètre | Valeurs |
-|---|---|
-| `max_models` | 5, 10, 20 |
-| `balance_classes` | True, False |
-| `seed` | 42 |
-| `sort_metric` | logloss |
+Pour Random Forest, on teste `ntrees` = 50, 100, 200, 300, 400, 500 et `max_depth` = 5, 10, 20, 30, 40, 50.
 
-Les candidats apprennent sur l'ensemble d'entraînement. Le classement AutoML utilise l'ensemble de validation fourni par `leaderboard_frame`. Chaque run MLflow conserve le score et le modèle du **leader**, tandis que le leaderboard complet s'affiche dans le terminal. AutoML peut ajouter des ensembles au-delà du nombre de modèles de base demandé.
+Pour AutoML, on teste `max_models` = 5, 10, 20 et `balance_classes` = True, False. Chaque run MLflow enregistre le meilleur modèle de cet essai AutoML. Les six essais ont obtenu le même meilleur logloss de validation ; le champion initial a été conservé.
 
-Le champion retenu est un **XGBoost**. Les six configurations ont obtenu le même meilleur logloss de validation à la précision enregistrée. Cela ne signifie pas que tous leurs modèles candidats sont équivalents. Le champion issu du premier essai AutoML a été conservé.
+La valeur `seed=42` est gardée pour tous les essais. Les champions sont choisis avec les résultats de **validation**, avant le test final.
 
-### Versions retenues sur l'installation de développement
-
-| Modèle MLflow | Alias | Version | Run d'origine |
-|---|---|---:|---|
-| `regression` | `champion` | 2 | `f55101b21926445a97e95dbf0cd5a35d` |
-| `classification` | `champion` | 1 | `f6bbaa2083fb4fbc9820478bcc80b81c` |
-
-Ces identifiants décrivent les modèles utilisés pour les résultats ci-dessous. Ils ne sont pas importés automatiquement lors du clonage du dépôt.
-
-## 8. Évaluation finale et résultats
-
-Après la sélection des champions, lancer :
+## Évaluation finale
 
 ```bash
 docker compose exec backend python src/evaluate.py
 ```
 
-Le script charge les deux champions, calcule leurs scores sur les **789 lignes de 2024** et crée un run `test-final-champions` dans l'expérience **`C73-Evaluation-finale`**. Il enregistre cinq métriques, le nombre de lignes, les identifiants H2O des modèles et l'artifact `matrice_confusion.txt`.
+Le script évalue les champions sur les **789 lignes de 2024**. Les scores sont enregistrés dans **`C73-Evaluation-finale`**, dans le run **`test-final-champions`**. La matrice de confusion est disponible dans **Artifacts → `matrice_confusion.txt`**.
 
-### Résultats obtenus
+| Métrique | Validation | Test final |
+|---|---:|---:|
+| MAE — régression, L/100 km | 0,5002 | 0,5936 |
+| RMSE — régression, L/100 km | 0,8329 | 0,8857 |
+| R² — régression | 0,9140 | 0,9015 |
+| Logloss — classification | 0,4671 | 0,9987 |
+| Erreur moyenne par classe | — | 25,18 % |
 
-| Tâche | Métrique | Validation 2023 | Test final 2024 |
-|---|---|---:|---:|
-| Régression | MAE, L/100 km | 0,5002 | 0,5936 |
-| Régression | RMSE, L/100 km | 0,8329 | 0,8857 |
-| Régression | R² | 0,9140 | 0,9015 |
-| Classification | Logloss | 0,4671 | 0,9987 |
-| Classification | Erreur moyenne par classe | — | 25,18 % |
+La classification donne **576 bonnes prédictions sur 789**, soit **73 % d'exactitude**, calculée à partir de la matrice de confusion.
 
-Run d'évaluation : `a22fee99e0da4323b13925c669de7b6f`. Les valeurs sont arrondies dans ce tableau ; MLflow conserve leur précision complète.
+### Limites
 
-### Matrice de confusion du test final
+- La classification confond surtout `Note elevee` avec `Note moyenne`.
+- Un même modèle de véhicule peut apparaître sur plusieurs années.
+- Certaines combinaisons saisies dans Streamlit peuvent ne pas correspondre à un véhicule réel.
+- Ces scores décrivent le test de 2024. On ne l'utilise pas pour continuer à choisir les paramètres.
 
-Les lignes représentent les classes réelles et les colonnes les classes prédites.
+## Commandes utiles
 
-| Classe réelle / prédite | Note elevee | Note faible | Note moyenne | Total |
-|---|---:|---:|---:|---:|
-| Note elevee | **169** | 10 | 120 | 299 |
-| Note faible | 6 | **117** | 13 | 136 |
-| Note moyenne | 7 | 57 | **290** | 354 |
-| Total | 182 | 184 | 423 | 789 |
-
-Il y a **576 bonnes prédictions sur 789**, soit **73,00 % d'exactitude**. Cette valeur est calculée à partir de la matrice ; le script ne l'enregistre pas actuellement comme métrique séparée.
-
-### Interprétation et limites
-
-- L'erreur absolue moyenne de consommation est d'environ **0,59 L/100 km** sur le test final. Le RMSE est légèrement supérieur à celui de validation.
-- Un R² de 0,9015 indique environ 90,15 % de variation expliquée sur ce test. Ce n'est pas un pourcentage de prédictions exactes.
-- La classification est moins performante sur le test selon le logloss. Elle reconnaît 169 des 299 exemples de `Note elevee` et en classe 120 comme `Note moyenne`.
-- Les catégories de smog sont regroupées pour le TP. Le modèle ne prédit pas la note officielle exacte.
-- Un même modèle de véhicule peut réapparaître sur plusieurs années. Le partage par année n'assure donc pas une séparation par famille de véhicules.
-- Le formulaire permet de combiner librement les caractéristiques. Certaines combinaisons peuvent être absentes du jeu d'entraînement ou ne pas correspondre à un véhicule réel.
-- Ces résultats portent sur ce fichier et ce partage. Ils ne démontrent pas la même performance sur tous les véhicules ou les années futures.
-
-Le test final sert à rendre compte des performances après la sélection. Il ne sert pas à continuer le choix des paramètres. Relancer le même script pour enregistrer ou vérifier les mêmes scores ne réentraîne pas les modèles.
-
-## 9. Commandes courantes
-
-Ces commandes s'utilisent après la première installation et l'enregistrement des champions.
+Après la première installation :
 
 ```bash
-# Démarrer les services existants
+# Démarrer le projet
 docker compose up -d
 
-# Reconstruire les images après une modification du code
+# Appliquer les modifications du code
 docker compose up -d --build
 
-# Afficher l'état des conteneurs
+# Voir l'état des services
 docker compose ps
-
-# Afficher les logs de l'API
-docker compose logs backend
-
-# Relancer les expérimentations, seulement si nécessaire
-docker compose exec backend python src/train.py
-docker compose exec backend python src/train_class.py
-
-# Essayer les champions sur trois exemples de validation
-docker compose exec backend python src/predict.py
-docker compose exec backend python src/predict_class.py
-
-# Évaluer les champions et enregistrer les scores finaux
-docker compose exec backend python src/evaluate.py
 
 # Recharger le champion de régression après un changement d'alias
 docker compose restart backend
 
-# Arrêter les services en conservant leurs données
+# Arrêter le projet
 docker compose stop
 ```
 
-Le code est copié dans les images Docker lors du build. Une simple commande `restart` ne copie pas les dernières modifications du PC. Un changement d'alias MLflow, en revanche, ne demande pas de rebuild : le redémarrage du backend recharge le champion de régression. Le champion de classification est actuellement chargé à chaque requête.
+Les données de MLflow et MinIO restent dans les **volumes Docker**. Elles ne sont pas copiées avec GitHub : une nouvelle installation doit entraîner et enregistrer ses modèles. `docker compose down -v` supprime ces volumes.
 
-### Conservation des données
+## Matériel utilisé
 
-PostgreSQL, MinIO et pgAdmin utilisent des volumes Docker. Arrêter les conteneurs conserve leurs données. Les volumes ne sont pas envoyés à GitHub. Sur une autre machine, suivre la première installation, puis entraîner et enregistrer les champions.
-
-`docker compose down -v` supprime les volumes du projet : les runs, modèles et réglages qui y sont stockés seraient perdus. Ce n'est pas la commande utilisée pour arrêter normalement le TP.
-
-## 10. Problèmes rencontrés
-
-| Message ou problème | Explication et action |
-|---|---|
-| `.env.local` introuvable | Créer le fichier décrit à l'étape 5.2. |
-| Bucket `mlflow` introuvable | Créer le bucket dans MinIO avant de sauvegarder les modèles. |
-| Modèle ou alias `champion` introuvable | Terminer l'entraînement et l'enregistrement des deux champions. Un tag ne remplace pas un alias. |
-| H2O ne trouve pas `c73-tp-backend:latest` | Lancer `docker compose build` avant de démarrer H2O. |
-| Une modification Python n'est pas prise en compte | Reconstruire l'image du service concerné. |
-| `localhost:5432` ne montre aucune page | PostgreSQL utilise un protocole SQL. Le consulter avec pgAdmin. |
-| Port déjà utilisé | Arrêter l'autre projet utilisant les mêmes ports. |
-| `Invalid Host header` dans MLflow | Le Compose inclut les hôtes autorisés. Après une modification de cette configuration, recréer le service avec `docker compose up -d mlflow`. |
-| Avertissement Git dans MLflow | Git n'est pas installé dans l'image backend. Certaines métadonnées Git ne sont pas enregistrées ; cela n'a pas empêché les entraînements. |
-| `artifact_path` est déprécié | Avertissement de MLflow 3.16. Les scripts utilisent encore cet argument et les modèles ont été enregistrés. |
-| Échec GLM pendant AutoML | Un essai a rencontré `ArrayIndexOutOfBoundsException`. AutoML a poursuivi avec les autres candidats. La cause de cet échec n'a pas été déterminée. |
-
-## 11. Références
-
-- [Jeu de données RNCan](https://open.canada.ca/data/en/dataset/98f1a129-f628-4ce4-b24d-6f16bf24dd64)
-- [Guide ÉnerGuide des véhicules](https://natural-resources.canada.ca/energy-efficiency/transportation-energy-efficiency/personal-vehicles/energuide-vehicles)
-- Matériel C73 : `PROJET DE SESSION – Choix 2`, exemples `mlops-pipeline-v1` et `mlops-pipeline-v2`.
-- Matériel C74 : exercice `032-manip_scoring_algo`, pour les mesures de classification et la matrice de confusion.
-- [H2O AutoML](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html)
-- [MLflow](https://mlflow.org/docs/latest/)
-- [FastAPI](https://fastapi.tiangolo.com/)
-- [Streamlit](https://docs.streamlit.io/)
-- [Diagrammes Mermaid dans GitHub](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams)
+- C73 : `PROJET DE SESSION – Choix 2` et les exemples `mlops-pipeline-v1` et `mlops-pipeline-v2`.
+- C74 : `032-manip_scoring_algo`, pour la matrice de confusion.
+- Documentation [H2O](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html) et [MLflow](https://mlflow.org/docs/latest/).
