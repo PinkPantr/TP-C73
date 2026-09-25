@@ -1,7 +1,8 @@
 import h2o
 import mlflow
 import mlflow.h2o
-from fastapi import FastAPI
+import subprocess
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import pandas as pd
 
@@ -63,3 +64,42 @@ def predict_class(data: PredictionRequest):
     predictions = model_class.predict(inputs)
 
     return{"classification": str(predictions[0, 0])}
+
+# One training script at a time, with the current single API worker.
+training_process = None
+training_task = None
+
+
+@app.post("/train/{task}", status_code=202)
+async def start_training(task: str):
+    global training_process, training_task
+
+    if task == "regression":
+        script = "src/train.py"
+    elif task == "classification":
+        script = "src/train_class.py"
+    else:
+        raise HTTPException(status_code=400, detail="Type d'entraînement inconnu.")
+
+    if training_process is not None and training_process.poll() is None:
+        raise HTTPException(status_code=409, detail="Un entraînement est déjà en cours.")
+
+    training_process = subprocess.Popen(["python", "-u", script])
+    training_task = task
+    return {"status": "running", "task": training_task}
+
+
+@app.get("/training/status")
+async def training_status():
+    if training_process is None:
+        return {"status": "idle", "task": None}
+
+    exit_code = training_process.poll()
+    if exit_code is None:
+        status = "running"
+    elif exit_code == 0:
+        status = "finished"
+    else:
+        status = "failed"
+
+    return {"status": status, "task": training_task}

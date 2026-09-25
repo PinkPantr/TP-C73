@@ -160,6 +160,17 @@ Pour AutoML, on teste `max_models` = 5, 10, 20 et `balance_classes` = True, Fals
 
 La valeur `seed=42` est gardée pour tous les essais. Les champions sont choisis avec les résultats de **validation**, avant le test final.
 
+## Entraînement depuis Streamlit
+
+Après la première installation, ouvrir **Entraîner les modèles** en bas de Streamlit.
+Choisir **Entraîner la régression** ou **Entraîner la classification**.
+FastAPI lance le script correspondant avec ses paramètres actuels, puis rend la main à l'interface.
+
+Le bouton **Actualiser le statut** indique si le script est en cours, terminé ou en échec.
+Un seul script peut être lancé à la fois depuis ces boutons. Les détails restent dans les logs du backend.
+Garder les services démarrés pendant l'entraînement ; le suivi du statut est réinitialisé au redémarrage de l'API.
+Les nouveaux runs sont ajoutés dans MLflow. Le choix des champions reste manuel.
+
 ## Évaluation finale
 
 ```bash

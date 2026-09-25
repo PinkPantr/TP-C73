@@ -97,3 +97,60 @@ if st.button("Prédire"):
 
     except requests.exceptions.RequestException as e:
         st.error(f"La requête a échoué : {e}")
+
+
+with st.expander("Entraîner les modèles"):
+    st.write(
+        "Régression : 36 configurations Random Forest. "
+        "Classification : 6 recherches AutoML. "
+        "Les résultats sont enregistrés dans MLflow."
+    )
+    st.caption(
+        "Un seul entraînement à la fois. Les champions actuels sont conservés. "
+        "Gardez les services démarrés pendant l'entraînement."
+    )
+
+    try:
+        status_response = requests.get(
+            "http://backend:8000/training/status", timeout=10
+        )
+        status_response.raise_for_status()
+        training = status_response.json()
+        running = training["status"] == "running"
+
+        if running:
+            st.info(f"Entraînement en cours : {training['task']}.")
+        elif training["status"] == "finished":
+            st.success(f"Entraînement terminé : {training['task']}. Consultez MLflow.")
+        elif training["status"] == "failed":
+            st.error(
+                "L'entraînement a échoué. Consultez les logs du backend "
+                "pour voir l'erreur."
+            )
+        else:
+            st.write("Aucun entraînement lancé depuis le démarrage de l'API.")
+
+        col1, col2 = st.columns(2)
+        regression_clicked = col1.button("Entraîner la régression", disabled=running)
+        classification_clicked = col2.button("Entraîner la classification", disabled=running)
+        st.button("Actualiser le statut")
+
+        if regression_clicked or classification_clicked:
+            if regression_clicked:
+                task = "regression"
+            else:
+                task = "classification"
+
+            training_response = requests.post(
+                f"http://backend:8000/train/{task}", timeout=10
+            )
+            if training_response.status_code == 409:
+                st.warning("Un entraînement est déjà en cours. Actualisez le statut.")
+            else:
+                training_response.raise_for_status()
+                st.rerun()
+
+        st.markdown("[Voir les expériences dans MLflow](http://localhost:5000)")
+
+    except requests.exceptions.RequestException:
+        st.error("Impossible de joindre le service d'entraînement. Vérifiez FastAPI.")
